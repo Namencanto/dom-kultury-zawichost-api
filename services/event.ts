@@ -1,7 +1,7 @@
 import path from "path";
 import fs from "fs";
 import { processEventData } from "../utils/event-handler";
-import { git } from "../utils/git";
+// import { git } from "../utils/git";
 import { repoPath } from "../utils/helpers";
 
 const months = [
@@ -57,9 +57,9 @@ export const deleteEventService = async (
   );
   if (fs.existsSync(filePath)) {
     fs.unlinkSync(filePath);
-    await git.add(filePath);
-    await git.commit(`Delete event: ${title}`);
-    await git.push();
+    // await git.add(filePath);
+    // await git.commit(`Delete event: ${title}`);
+    // await git.push();
 
     return { message: "Event deleted successfully!" };
   } else {

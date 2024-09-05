@@ -1,7 +1,7 @@
 import path from "path";
 import fs from "fs";
 import { JSDOM } from "jsdom";
-import { git } from "./git";
+// import { git } from "./git";
 import { repoPath } from "./helpers";
 import { ParsedData } from "../controllers/event";
 
@@ -187,11 +187,11 @@ export const processEventData = async (
 
   fs.writeFileSync(newFilePath, JSON.stringify(fileContent, null, 2), "utf8");
 
-  await git.add(newFilePath);
-  await git.commit(
-    existingPath ? `Update event: ${title}` : `Add event: ${title}`
-  );
-  await git.push();
+  // await git.add(newFilePath);
+  // await git.commit(
+  //   existingPath ? `Update event: ${title}` : `Add event: ${title}`
+  // );
+  // await git.push();
 
   return {
     message: "Event processed and pushed successfully!",
