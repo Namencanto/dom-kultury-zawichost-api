@@ -1,4 +1,4 @@
-import express, { Application, Request, Response } from "express";
+import express, { Application } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
@@ -24,12 +24,10 @@ app.use(express.urlencoded({ limit: "50mb", extended: true }));
 app.use("/api", verifyJWT, eventRoutes);
 app.use("/auth", authRoutes);
 
-// todo: fix
-// app.use((err: any, req: Request, res: Response) => {
-//   console.error(err.stack);
-//   res.status(500).json({ error: "An unexpected error occurred." });
-// });
+if (process.env.NODE_ENV === "development") {
+  app.listen(port, () => {
+    console.log(`Server is running on http://localhost:${port}`);
+  });
+}
 
-app.listen(port, () => {
-  console.log(`Server is running on http://localhost:${port}`);
-});
+export default app;
