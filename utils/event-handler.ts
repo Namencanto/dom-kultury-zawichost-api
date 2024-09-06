@@ -1,11 +1,12 @@
-import path from "path";
-import fs from "fs";
 import { JSDOM } from "jsdom";
-// import { git } from "./git";
-import { repoPath } from "./helpers";
 import { ParsedData } from "../controllers/event";
+import {
+  createOrUpdateFileOnGithub,
+  deleteFileOnGithub,
+  fetchFileFromGithub,
+} from "./helpers";
 
-const months = [
+const months: string[] = [
   "styczen",
   "luty",
   "marzec",
@@ -23,7 +24,7 @@ const months = [
 export const processEventData = async (
   parsedData: ParsedData,
   existingPath?: string
-) => {
+): Promise<{ message: string; filePath: string }> => {
   const {
     title,
     eventDate,
@@ -49,29 +50,34 @@ export const processEventData = async (
     .replace(/[^a-zA-Z0-9\-]/g, "")
     .toLowerCase();
 
-  const imagesDirPath = path.join(repoPath, "public", "images", year, month);
-  if (!fs.existsSync(imagesDirPath)) {
-    fs.mkdirSync(imagesDirPath, { recursive: true });
-  }
+  const newFilePath = `content/aktualnosci/${year}/${month}/${titleSlug}.json`;
 
-  const newFilePath = path.join(
-    repoPath,
-    "content",
-    "aktualnosci",
-    year,
-    month,
-    `${titleSlug}.json`
-  );
+  let existingFileSha: string | undefined = undefined;
 
   if (existingPath) {
-    const existingFilePath = path.join(
-      repoPath,
-      "content",
-      `${existingPath}.json`
-    );
-    if (fs.existsSync(existingFilePath)) {
-      fs.unlinkSync(existingFilePath);
+    const existingFilePath = `content${existingPath}.json`;
+    try {
+      const existingFileData = await fetchFileFromGithub(existingFilePath);
+
+      if (existingFileData && existingFileData.sha) {
+        existingFileSha = existingFileData.sha;
+        await deleteFileOnGithub(existingFilePath, existingFileData.sha);
+      } else {
+        console.error("Could not retrieve SHA for the existing file.");
+        throw new Error("Could not retrieve SHA for the existing file.");
+      }
+    } catch (error) {
+      console.error("Could not delete existing file:", error);
     }
+  }
+
+  try {
+    const newFileData = await fetchFileFromGithub(newFilePath);
+    if (newFileData && newFileData.sha) {
+      existingFileSha = newFileData.sha;
+    }
+  } catch (error) {
+    console.log(`File does not exist at new path: ${newFilePath}`);
   }
 
   let thumbnail = "";
@@ -94,13 +100,6 @@ export const processEventData = async (
         if (imgSrc && imgSrc.startsWith("data:image")) {
           const extension = imgSrc.split(";")[0].split("/")[1];
           const imageName = `inline-image-${Date.now()}-${imgIndex}.${extension}`;
-          const imagePath = path.join(imagesDirPath, imageName);
-
-          fs.writeFileSync(
-            imagePath,
-            imgSrc.split(";base64,").pop()!,
-            "base64"
-          );
           const newSrc = `/images/${year}/${month}/${imageName}`;
           imgNode.setAttribute("src", newSrc);
 
@@ -135,9 +134,6 @@ export const processEventData = async (
       if (imgSrc && imgSrc.startsWith("data:image")) {
         const extension = imgSrc.split(";")[0].split("/")[1];
         const imageName = `inline-image-${Date.now()}-${index}.${extension}`;
-        const imagePath = path.join(imagesDirPath, imageName);
-
-        fs.writeFileSync(imagePath, imgSrc.split(";base64,").pop()!, "base64");
         const newSrc = `/images/${year}/${month}/${imageName}`;
         node.setAttribute("src", newSrc);
 
@@ -185,13 +181,15 @@ export const processEventData = async (
     ],
   };
 
-  fs.writeFileSync(newFilePath, JSON.stringify(fileContent, null, 2), "utf8");
-
-  // await git.add(newFilePath);
-  // await git.commit(
-  //   existingPath ? `Update event: ${title}` : `Add event: ${title}`
-  // );
-  // await git.push();
+  try {
+    await createOrUpdateFileOnGithub(
+      newFilePath,
+      JSON.stringify(fileContent, null, 2),
+      existingFileSha
+    );
+  } catch (error) {
+    throw new Error("Failed to create or update event file on GitHub.");
+  }
 
   return {
     message: "Event processed and pushed successfully!",

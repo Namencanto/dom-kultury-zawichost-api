@@ -33,6 +33,7 @@
     "@types/morgan": "^1.9.9",
     "@types/multer": "^1.4.11",
     "@types/node": "^22.2.0",
+    "@types/node-fetch": "^2.6.11",
     "@types/speakeasy": "^2.0.10",
     "nodemon": "^3.1.4",
     "ts-node": "^10.9.2",

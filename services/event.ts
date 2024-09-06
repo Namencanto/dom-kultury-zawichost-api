@@ -1,10 +1,7 @@
-import path from "path";
-import fs from "fs";
 import { processEventData } from "../utils/event-handler";
-// import { git } from "../utils/git";
-import { repoPath } from "../utils/helpers";
+import { deleteFileOnGithub, fetchFileFromGithub } from "../utils/helpers";
 
-const months = [
+const months: string[] = [
   "styczen",
   "luty",
   "marzec",
@@ -19,7 +16,7 @@ const months = [
   "grudzien",
 ];
 
-const stringToSlug = (str: string) => {
+const stringToSlug = (str: string): string => {
   return str
     .toLowerCase()
     .replace(/\s+/g, "-")
@@ -27,42 +24,36 @@ const stringToSlug = (str: string) => {
     .trim();
 };
 
-export const addEventService = async (parsedData: any) => {
+export const addEventService = async (parsedData: any): Promise<any> => {
   return await processEventData(parsedData);
 };
 
 export const updateEventService = async (
   parsedData: any,
   existingPath: string
-) => {
+): Promise<any> => {
   return await processEventData(parsedData, existingPath);
 };
 
 export const deleteEventService = async (
   title: string,
   publishDate: string
-) => {
+): Promise<{ message: string }> => {
   const publishDateObj = new Date(publishDate);
   const year = publishDateObj.getFullYear().toString();
   const month = months[publishDateObj.getMonth()];
   const titleSlug = stringToSlug(title);
 
-  const filePath = path.join(
-    repoPath,
-    "content",
-    "aktualnosci",
-    year,
-    month,
-    `${titleSlug}.json`
-  );
-  if (fs.existsSync(filePath)) {
-    fs.unlinkSync(filePath);
-    // await git.add(filePath);
-    // await git.commit(`Delete event: ${title}`);
-    // await git.push();
+  const filePath = `content/aktualnosci/${year}/${month}/${titleSlug}.json`;
+
+  try {
+    const fileData = await fetchFileFromGithub(filePath);
+    const sha = fileData.sha;
+
+    await deleteFileOnGithub(filePath, sha);
 
     return { message: "Event deleted successfully!" };
-  } else {
-    throw new Error("Event not found.");
+  } catch (error) {
+    throw new Error("Event not found or could not be deleted.");
   }
 };
