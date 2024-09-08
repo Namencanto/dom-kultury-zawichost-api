@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { authenticateUser } from "../services/auth";
+import { authenticateUser } from "@services/auth";
 
 export const adminLogin = async (req: Request, res: Response) => {
   const { username, password, twoFactorCode } = req.body;

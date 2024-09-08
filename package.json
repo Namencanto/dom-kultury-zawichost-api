@@ -3,14 +3,16 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "dev": "nodemon server.ts",
-    "build": "ts-node server.ts",
+    "build": "tsx server.ts",
     "start": "node dist/index.js"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@octokit/rest": "^21.0.2",
     "@types/jsdom": "^21.1.7",
     "bcrypt": "^5.1.1",
     "body-parser": "^1.20.2",
@@ -36,7 +38,7 @@
     "@types/node-fetch": "^2.6.11",
     "@types/speakeasy": "^2.0.10",
     "nodemon": "^3.1.4",
-    "ts-node": "^10.9.2",
+    "tsx": "^4.19.0",
     "typescript": "^5.5.4"
   }
 }

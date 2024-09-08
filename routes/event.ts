@@ -1,11 +1,11 @@
 import { Router } from "express";
 import multer, { FileFilterCallback } from "multer";
-import { addEvent, editEvent, deleteEvent } from "../controllers/event";
+import { addEvent, editEvent, deleteEvent } from "@controllers/event";
 
 const allowedMimeTypes = ["image/jpeg", "image/png", "image/gif"];
 
 const upload = multer({
-  dest: "uploads/",
+  storage: multer.memoryStorage(),
   fileFilter: (req, file, cb: FileFilterCallback) => {
     if (allowedMimeTypes.includes(file.mimetype)) {
       cb(null, true);

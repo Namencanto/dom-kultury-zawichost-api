@@ -1,17 +1,16 @@
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import speakeasy from "speakeasy";
-
-const jwtSecret = process.env.JWT_SECRET || "super-secret-key";
+import config from "@config";
 
 export const authenticateUser = async (
   username: string,
   password: string,
   token: string
 ) => {
-  const envUsername = process.env.ADMIN_USERNAME;
-  const envPassword = process.env.ADMIN_PASSWORD;
-  const totpSecret = process.env.TOTP_SECRET;
+  const envUsername = config.ADMIN_USERNAME;
+  const envPassword = config.ADMIN_PASSWORD;
+  const totpSecret = config.TOTP_SECRET;
 
   if (!envUsername || !envPassword || !totpSecret) {
     throw new Error("Server configuration is missing.");
@@ -36,7 +35,7 @@ export const authenticateUser = async (
     throw new Error("Invalid 2FA token.");
   }
 
-  const authToken = jwt.sign({ username, role: "ADMIN" }, jwtSecret, {
+  const authToken = jwt.sign({ username, role: "ADMIN" }, config.JWT_SECRET, {
     expiresIn: "1h",
   });
 

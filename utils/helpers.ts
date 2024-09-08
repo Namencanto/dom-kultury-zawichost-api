@@ -1,108 +1,173 @@
-import fetch from "node-fetch";
-import dotenv from "dotenv";
-dotenv.config();
+import { Octokit } from "@octokit/rest";
+import config from "@config";
 
-const GITHUB_API_BASE_URL = "https://api.github.com";
-const GITHUB_OWNER = process.env.GITHUB_OWNER;
-const GITHUB_REPO = process.env.GITHUB_REPO;
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
-
-export interface GithubFileData {
-  sha: string;
-  content?: string;
-  encoding?: string;
+if (!config.GITHUB_OWNER || !config.GITHUB_REPO || !config.GITHUB_TOKEN) {
+  throw new Error(
+    "GitHub credentials are not properly configured in the .env file."
+  );
 }
 
-export interface GithubFileResult {
-  sha: string;
-  content: any;
-}
+export const octokit = new Octokit({
+  auth: config.GITHUB_TOKEN,
+});
+
+export const createOrUpdateFilesOnGithub = async (
+  files: {
+    path: string;
+    content: string;
+    message: string;
+    isBinary?: boolean;
+    sha?: string;
+  }[]
+) => {
+  const branch = "main";
+  let jsonFileProcessed = false;
+
+  for (const file of files) {
+    if (!file.isBinary && file.path.endsWith(".json")) {
+      jsonFileProcessed = true;
+      await processJsonFile(file, branch);
+    } else {
+      await processBinaryFile(file);
+    }
+  }
+};
+
+const processJsonFile = async (
+  file: {
+    path: string;
+    content: string;
+    message: string;
+  },
+  branch: string
+) => {
+  const latestCommitSha = await getLatestCommitSha(branch, octokit);
+
+  const treeSha = await createTree(
+    latestCommitSha,
+    [
+      {
+        path: file.path,
+        mode: "100644",
+        type: "blob",
+        content: file.content,
+      },
+    ],
+    octokit
+  );
+
+  const newCommitSha = await createCommit(
+    latestCommitSha,
+    treeSha,
+    file.message,
+    octokit
+  );
+
+  await updateRef(branch, newCommitSha, octokit);
+};
+
+const processBinaryFile = async (file: {
+  path: string;
+  content: string;
+  message: string;
+  sha?: string;
+}) => {
+  await octokit.repos.createOrUpdateFileContents({
+    owner: config.GITHUB_OWNER,
+    repo: config.GITHUB_REPO,
+    path: file.path,
+    message: file.message,
+    content: file.content,
+    sha: file.sha,
+  });
+};
 
 export const fetchFileFromGithub = async (
   filePath: string
-): Promise<GithubFileResult> => {
-  const url = `${GITHUB_API_BASE_URL}/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${filePath}`;
-
-  const response = await fetch(url, {
-    headers: {
-      Accept: "application/vnd.github.v3+json",
-      Authorization: `token ${GITHUB_TOKEN}`,
-    },
-  });
-  console.log(response);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch file from GitHub: ${response.statusText}`);
-  }
-
-  const data: GithubFileData = await response.json();
-
-  if (data.content && data.encoding === "base64") {
-    const decodedContent = Buffer.from(data.content, "base64").toString(
-      "utf-8"
-    );
-
-    try {
-      const parsedContent = JSON.parse(decodedContent);
-      console.log("Decoded and parsed content:", parsedContent);
-      return { sha: data.sha, content: parsedContent };
-    } catch (error) {
-      console.error("Failed to parse JSON content:", error);
-      throw new Error("Failed to parse JSON content.");
-    }
-  } else {
-    console.log("File content is not base64 encoded or not present.");
-    throw new Error("File content is not base64 encoded or not present.");
-  }
-};
-
-export const deleteFileOnGithub = async (
-  filePath: string,
-  sha: string
-): Promise<void> => {
-  const url = `${GITHUB_API_BASE_URL}/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${filePath}`;
-  console.log(url);
-  const response = await fetch(url, {
-    method: "DELETE",
-    headers: {
-      Accept: "application/vnd.github.v3+json",
-      Authorization: `token ${GITHUB_TOKEN}`,
-    },
-    body: JSON.stringify({
-      message: `Delete event: ${filePath}`,
-      sha: sha,
-    }),
+): Promise<{ sha: string; content: string }> => {
+  const response = await octokit.repos.getContent({
+    owner: config.GITHUB_OWNER,
+    repo: config.GITHUB_REPO,
+    path: filePath,
   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to delete file on GitHub: ${response.statusText}`);
-  }
-};
-
-export const createOrUpdateFileOnGithub = async (
-  filePath: string,
-  content: string,
-  sha?: string
-): Promise<void> => {
-  const url = `${GITHUB_API_BASE_URL}/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${filePath}`;
-  const body: any = {
-    message: sha ? `Update file: ${filePath}` : `Create file: ${filePath}`,
-    content: Buffer.from(content).toString("base64"),
+  const data = response.data as {
+    sha: string;
+    content: string;
+    encoding: string;
   };
 
-  if (sha) body.sha = sha;
+  const decodedContent = Buffer.from(data.content, "base64").toString();
+  return { sha: data.sha, content: decodedContent };
+};
 
-  const response = await fetch(url, {
-    method: "PUT",
-    headers: {
-      Accept: "application/vnd.github.v3+json",
-      Authorization: `token ${GITHUB_TOKEN}`,
-    },
-    body: JSON.stringify(body),
+export const createCommit = async (
+  parentSha: string,
+  treeSha: string,
+  message: string,
+  octokit: Octokit
+): Promise<string> => {
+  const { data } = await octokit.git.createCommit({
+    owner: config.GITHUB_OWNER,
+    repo: config.GITHUB_REPO,
+    message,
+    tree: treeSha,
+    parents: [parentSha],
   });
 
-  if (!response.ok) {
-    throw new Error(
-      `Failed to create or update file on GitHub: ${response.statusText}`
-    );
-  }
+  return data.sha;
+};
+
+export const getLatestCommitSha = async (
+  branch: string,
+  octokit: Octokit
+): Promise<string> => {
+  const { data } = await octokit.git.getRef({
+    owner: config.GITHUB_OWNER,
+    repo: config.GITHUB_REPO,
+    ref: `heads/${branch}`,
+  });
+
+  return data.object.sha;
+};
+
+export const createTree = async (
+  baseTreeSha: string,
+  files: {
+    path: string;
+    content: string;
+    mode: string;
+    type: string;
+  }[],
+  octokit: Octokit
+): Promise<string> => {
+  const tree = files.map((file) => ({
+    path: file.path,
+    mode: file.mode,
+    type: file.type,
+    content: file.content,
+  }));
+
+  const { data } = await octokit.git.createTree({
+    owner: config.GITHUB_OWNER,
+    repo: config.GITHUB_REPO,
+    base_tree: baseTreeSha,
+    tree,
+  });
+
+  return data.sha;
+};
+
+export const updateRef = async (
+  branch: string,
+  commitSha: string,
+  octokit: Octokit
+): Promise<void> => {
+  await octokit.git.updateRef({
+    owner: config.GITHUB_OWNER,
+    repo: config.GITHUB_REPO,
+    ref: `heads/${branch}`,
+    sha: commitSha,
+    force: true,
+  });
 };
